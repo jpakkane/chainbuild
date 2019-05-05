@@ -14,5 +14,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os, sys, subprocess, shutil, pathlib
+
+if shutil.which('meson'):
+    meson_bin = 'meson'
+elif 'MESON_EXE' in os.environ:
+    meson_bin = os.environ['MESON_EXE']
+else:
+    meson_bin = '/home/jpakkane/workspace/meson/meson.py'
+
+def write_chains(ninjafile):
+    ninjafile.write('''build first_build: run_command
+ command = %s ../cc first_build
+ 
+build first: run_command | first_build
+ command = ninja -C first_build
+
+build clean_first: run_command | first_build
+ command = ninja -C first_build clean
+''' % meson_bin)
+
+def write_helpers(ninjafile):
+    ninjafile.write('build all: phony first\n')
+    ninjafile.write('build clean: phony clean_first\n')
+    ninjafile.write('default all\n')
+
+def setup_compiler_chain():
+    chaindir = pathlib.Path('chainbuild')
+    if chaindir.is_dir():
+        shutil.rmtree(chaindir)
+    os.mkdir(chaindir)
+    with (chaindir / 'build.ninja').open('w') as ninjafile:
+        ninjafile.write('''ninja_required_version = 1.8.2
+rule run_command
+ command = $command
+ description = $desc
+ restat = 1
+''')
+        write_chains(ninjafile)
+        write_helpers(ninjafile)
+
 if __name__ == '__main__':
-    print('Nothing here yet.')
+    assert(os.path.isdir('cc'))
+    setup_compiler_chain()
