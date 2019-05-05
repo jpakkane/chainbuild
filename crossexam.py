@@ -32,11 +32,22 @@ build first: run_command | first_build
 
 build clean_first: run_command | first_build
  command = ninja -C first_build clean
-''' % meson_bin)
+
+'''  % meson_bin)
+
+    ninjafile.write('''build second_build: run_command | first_build
+ command = CC=%s/first_build/newcc %s ../cc second_build
+ 
+build second: run_command | second_build
+ command = ninja -C second_build
+
+build clean_second: run_command | second_build
+ command = ninja -C second_build clean
+''' % (os.getcwd()+ '/chainbuild', meson_bin))
 
 def write_helpers(ninjafile):
-    ninjafile.write('build all: phony first\n')
-    ninjafile.write('build clean: phony clean_first\n')
+    ninjafile.write('build all: phony first second \n')
+    ninjafile.write('build clean: phony clean_first clean_second\n')
     ninjafile.write('default all\n')
 
 def setup_compiler_chain():

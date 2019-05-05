@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     int i;
     char **actual_args = malloc(sizeof(char*)*10000);
     actual_args[0] = strdup(actual_cc);
-    for(i=0; i<argc; i++) {
+    for(i=1; i<argc; i++) {
         actual_args[i] = strdup(argv[i]);
     }
     actual_args[i] = NULL;
