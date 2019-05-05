@@ -16,6 +16,13 @@
 
 import os, sys, subprocess, shutil, pathlib
 
+ninja_header = '''ninja_required_version = 1.8.2
+rule run_command
+ command = $command
+ description = $desc
+ restat = 1
+'''
+
 if shutil.which('meson'):
     meson_bin = 'meson'
 elif 'MESON_EXE' in os.environ:
@@ -63,6 +70,7 @@ def write_chains(ninjafile, elements):
 def write_helpers(ninjafile, elements):
     ninjafile.write('build all: phony {}\n'.format(' '.join(elements)))
     ninjafile.write('build clean: phony {}\n'.format(' '.join(['clean_' + x for x in elements])))
+    ninjafile.write('build install: phony {}\n'.format(' '.join(['install_' + x for x in elements])))
     ninjafile.write('default all\n')
 
 def setup_compiler_chain():
@@ -71,16 +79,66 @@ def setup_compiler_chain():
         shutil.rmtree(chaindir)
     os.mkdir(chaindir)
     with (chaindir / 'build.ninja').open('w') as ninjafile:
-        ninjafile.write('''ninja_required_version = 1.8.2
-rule run_command
- command = $command
- description = $desc
- restat = 1
-''')
+        ninjafile.write(ninja_header)
         elements = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
         write_chains(ninjafile, elements)
         write_helpers(ninjafile, elements)
 
+def setup_multilib():
+    # Emulates an Android compile with one jar + multiple shared libs.
+    fauxdir = pathlib.Path('fauxbuild')
+    if fauxdir.is_dir():
+        shutil.rmtree(fauxdir)
+    os.mkdir(fauxdir)
+    with (fauxdir / 'build.ninja').open('w') as ninjafile:
+        native = 'x86_64'
+        ninjafile.write(ninja_header)
+        ninjafile.write('''build %s_build: run_command
+ command = %s ../fauxdroid %s_build -Dbuild_java=true --prefix=/usr --libdir=lib/x86_64
+ pool = console
+''' % (native, meson_bin, native))
+
+        ninjafile.write('''build %s: run_command | %s_build
+ command = ninja -C %s_build
+ pool = console
+''' % (native, native, native))
+
+        ninjafile.write('''build clean_%s: run_command
+ command = ninja -C %s_build clean
+ pool = console
+''' % (native, native))
+
+        ninjafile.write('''build install_%s: run_command | %s_build
+ command = ninja -C %s_build install
+ pool = console
+
+'''  % (native, native, native))
+
+        cross = 'arm'
+        ninjafile.write('''build %s_build: run_command
+ command = %s --cross-file %s/ubuntu-armhf.txt --prefix=/usr --libdir=lib/arm ../fauxdroid %s_build
+ pool = console
+''' % (cross, meson_bin, os.getcwd(), cross))
+
+        ninjafile.write('''build %s: run_command | %s_build
+ command = ninja -C %s_build
+ pool = console
+''' % (cross, cross, cross))
+
+        ninjafile.write('''build clean_%s: run_command
+ command = ninja -C %s_build clean
+ pool = console
+''' % (cross, cross))
+
+        ninjafile.write('''build install_%s: run_command | %s_build
+ command = ninja -C %s_build install
+ pool = console
+
+'''  % (cross, cross, cross))
+        write_helpers(ninjafile, ['x86_64', 'arm'])
+
 if __name__ == '__main__':
     assert(os.path.isdir('cc'))
     setup_compiler_chain()
+    setup_multilib()
+
