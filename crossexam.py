@@ -23,31 +23,46 @@ elif 'MESON_EXE' in os.environ:
 else:
     meson_bin = '/home/jpakkane/workspace/meson/meson.py'
 
-def write_chains(ninjafile):
-    ninjafile.write('''build first_build: run_command
- command = %s ../cc first_build
- 
-build first: run_command | first_build
- command = ninja -C first_build
+def write_chains(ninjafile, elements):
+    for i, elem in enumerate(elements):
+        if i == 0:
+            ninjafile.write('''build %s_build: run_command
+ command = %s ../cc %s_build
+ pool = console
+''' % (elem, meson_bin, elem))
 
-build clean_first: run_command | first_build
- command = ninja -C first_build clean
+            ninjafile.write('''build %s: run_command | %s_build
+ command = ninja -C %s_build
+ pool = console
+''' % (elem, elem, elem))
+            
+            ninjafile.write('''build clean_%s: run_command | %s_build
+ command = ninja -C %s_build clean
+ pool = console
 
-'''  % meson_bin)
+'''  % (elem, elem, elem))
 
-    ninjafile.write('''build second_build: run_command | first_build
- command = CC=%s/first_build/newcc %s ../cc second_build
- 
-build second: run_command | second_build
- command = ninja -C second_build
+        else:
+            prev_cc = os.getcwd() + '/chainbuild/%s_build/newcc' % elements[i-1]
+            ninjafile.write('''build %s_build: run_command | %s_build
+ command = CC=%s %s ../cc %s_build -Dactual=%s
+ pool = console
+''' % (elem, elements[i-1], prev_cc, meson_bin, elem, prev_cc))
 
-build clean_second: run_command | second_build
- command = ninja -C second_build clean
-''' % (os.getcwd()+ '/chainbuild', meson_bin))
+            ninjafile.write('''build %s: run_command | %s_build
+ command = ninja -C %s_build
+ pool = console
+''' % (elem, elem, elem))
 
-def write_helpers(ninjafile):
-    ninjafile.write('build all: phony first second \n')
-    ninjafile.write('build clean: phony clean_first clean_second\n')
+            ninjafile.write('''build clean_%s: run_command | %s_build
+ command = ninja -C %s_build clean
+ pool = console
+
+''' % (elem, elem, elem))
+
+def write_helpers(ninjafile, elements):
+    ninjafile.write('build all: phony {}\n'.format(' '.join(elements)))
+    ninjafile.write('build clean: phony {}\n'.format(' '.join(['clean_' + x for x in elements])))
     ninjafile.write('default all\n')
 
 def setup_compiler_chain():
@@ -62,8 +77,9 @@ rule run_command
  description = $desc
  restat = 1
 ''')
-        write_chains(ninjafile)
-        write_helpers(ninjafile)
+        elements = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
+        write_chains(ninjafile, elements)
+        write_helpers(ninjafile, elements)
 
 if __name__ == '__main__':
     assert(os.path.isdir('cc'))
