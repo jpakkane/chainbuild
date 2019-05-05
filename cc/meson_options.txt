@@ -1,0 +1,1 @@
+option('actual', type: 'string', value: '/usr/bin/cc')
